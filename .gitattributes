@@ -1,0 +1,18 @@
+# ASDUCK protected repository payload contract.
+# Encrypted envelopes are exact bytes and MUST NOT be EOL-normalized by Git.
+revoked.enc.json -text
+security.enc.json -text
+session_registry.enc.json -text
+update.enc.json -text
+scripts/generate-session-tokens.enc.json -text
+
+# One-time migration compatibility names; publishers remove these from the repository.
+revoked.json -text
+security.json -text
+session_registry.json -text
+update.json -text
+
+# Source automation files are canonical LF so Windows global core.autocrlf cannot cause churn.
+.github/workflows/*.yml text eol=lf
+.github/workflows/*.yaml text eol=lf
+scripts/*.mjs text eol=lf

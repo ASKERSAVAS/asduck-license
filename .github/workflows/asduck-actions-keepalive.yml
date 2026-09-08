@@ -1,0 +1,53 @@
+name: ASDUCK Actions Keepalive
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 1 * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: asduck-actions-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact default branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 1
+
+      - name: Refresh activity without growing history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          expected="$(git rev-parse HEAD)"
+          tree="$(git write-tree)"
+          root="$(printf 'ASDUCK keepalive root snapshot %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" | git commit-tree "$tree")"
+          test "$(git rev-list --count "$root")" = "1"
+          tag_name="$(git ls-remote --tags --refs origin 'refs/tags/v*' | awk '{sub(/^refs\/tags\//,"",$2); if ($2 ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/) print $2}' | sort -V | tail -n 1)"
+          tag_expected=""
+          if [ -n "$tag_name" ]; then
+            tag_expected="$(git ls-remote origin "refs/tags/$tag_name" | awk '{print $1}')"
+          fi
+          if [ -n "$tag_name" ] && [ -n "$tag_expected" ]; then
+            git push --atomic \
+              --force-with-lease=refs/heads/main:"$expected" \
+              --force-with-lease=refs/tags/$tag_name:"$tag_expected" \
+              origin "$root:refs/heads/main" "$root:refs/tags/$tag_name"
+          else
+            git push --force-with-lease=refs/heads/main:"$expected" origin "$root:refs/heads/main"
+          fi
+          remote="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test "$remote" = "$root"
+          if [ -n "$tag_name" ] && [ -n "$tag_expected" ]; then
+            remote_tag="$(git ls-remote origin "refs/tags/$tag_name" | awk '{print $1}')"
+            test "$remote_tag" = "$root"
+          fi

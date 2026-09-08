@@ -1,0 +1,34 @@
+name: ASDUCK Session Public Recovery
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover-public:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Derive public key from existing signer secret
+        shell: bash
+        env:
+          ASDUCK_SESSION_PRIVATE_KEY_B64: ${{ secrets.ASDUCK_SESSION_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ASDUCK_SESSION_PRIVATE_KEY_B64:-}" ]; then
+            echo "ASDUCK session signer secret is missing." >&2
+            exit 21
+          fi
+          node <<'NODE'
+          const crypto = require('crypto');
+          const secret = process.env.ASDUCK_SESSION_PRIVATE_KEY_B64 || '';
+          const der = Buffer.from(secret, 'base64');
+          if (!der.length) throw new Error('empty signer secret');
+          const privateKey = crypto.createPrivateKey({ key: der, format: 'der', type: 'pkcs8' });
+          if (privateKey.asymmetricKeyType !== 'ec') throw new Error('signer is not EC');
+          const details = privateKey.asymmetricKeyDetails || {};
+          if (details.namedCurve && !['prime256v1','P-256','secp256r1'].includes(details.namedCurve)) throw new Error('signer is not P-256');
+          const publicDer = crypto.createPublicKey(privateKey).export({ format: 'der', type: 'spki' });
+          console.log('ASDUCK_SESSION_PUBLIC_B64=' + publicDer.toString('base64'));
+          NODE
